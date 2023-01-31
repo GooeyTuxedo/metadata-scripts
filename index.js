@@ -90,8 +90,9 @@ const getMissingMetadata = async (tokens) => {
 const zipMetadataList = ([metadataList, replacementValues]) => { 
   const repVs = replacementValues.filter(x => x != {})
   console.log("values fetched: \n", repVs.map(extractMetadata).filter(x => x).map(x => x['tokenId']));
-  return metadataList
-    .concat(repVs);
+  return metadataList.concat(repVs)
+    .sort((a, b) => a.tokenId - b.tokenId)
+    .filter((token) => token);
 }
 
 function formatMetadataListToCSV(metadataList) {
