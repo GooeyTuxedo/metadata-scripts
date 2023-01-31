@@ -1,8 +1,10 @@
 import fs from 'fs';
 import csv from 'fast-csv';
 import fetch from 'node-fetch';
+import { getNftContractMetadata, initializeAlchemy, Network } from '@alch/alchemy-sdk';
+import * as dotenv from 'dotenv';
+dotenv.config();
 
-const endTokenId = parseInt(process.argv.slice(2)[0]);
 const baseUrl = "https://ethgobblers.com/metadata/"
 
 const extractMetadata = json => {
@@ -40,6 +42,17 @@ const extractMetadata = json => {
   };
 }
 
+const getTokenIndex = async () => {
+  const settings = {
+    apiKey: process.env.API_KEY,
+    network: Network.ETH_MAINNET
+  }
+  const alchemy = initializeAlchemy(settings);
+
+  return getNftContractMetadata(alchemy, '0x0a8d311b99ddaa9ebb45fd606eb0a1533004f26b')
+    .then(({totalSupply}) => parseInt(totalSupply));
+}
+
 const getMetadata = async (tokenId) => {
   const url = `${baseUrl}${tokenId}`;
   const response = await fetch(url)
@@ -49,21 +62,23 @@ const getMetadata = async (tokenId) => {
   return response;
 }
 
-const getMetadataList = async (n) => {
-  const range = Array.from({ length: n + 1 }, (_, i) => i);
+const getMetadataList = async (length) => {
+  const range = Array.from({ length }, (_, i) => i);
   const metadataPromises = range.map(getMetadata);
 
+  console.log(`Fetching total supply of ${length}`);
   return Promise.all(metadataPromises);
 }
 
 const getMetadataByIDList = async (idList) => {
-  console.log(`fetching missing values: \n`, idList);
   const metadataPromises = idList.map(getMetadata);
+
+  console.log(`fetching missing values: \n`, idList);
   return Promise.all(metadataPromises);
 }
 
 const getMissingMetadata = async (tokens) => {
-  const range = Array.from({ length: endTokenId + 1 }, (_, i) => i);
+  const range = Array.from({ length: tokens.length }, (_, i) => i);
   const extractedTokens = tokens.map(extractMetadata);
   const tokenIDs = extractedTokens.map(token => token["tokenId"]);
   const missingIds = range.reduce((acc, id) => tokenIDs.includes(id) ? acc : acc.concat([id]), []);
@@ -84,6 +99,7 @@ function formatMetadataListToCSV(metadataList) {
   let headers = ["tokenId", "image", "age", "body", "disposition", "health", "isAwake", "isBuried", "generation", "mitosisCredits", "parentID"];
   let date = new Date();
   let timestamp = date.toISOString().slice(0, 10);
+  let endTokenId = metadataList[metadataList.length - 1].tokenId;
   let fileName = `${timestamp}-metadata-upto-${endTokenId}.csv`;
   let csvStream = csv.format({ headers: headers });
   let writableStream = fs.createWriteStream(`${snapshotDir}${fileName}`);
@@ -100,7 +116,8 @@ function formatMetadataListToCSV(metadataList) {
   console.log(`${fileName} file has been created`);
 }
 
-getMetadataList(endTokenId) // <3
+getTokenIndex()
+  .then(getMetadataList)
   .then(getMissingMetadata)
   .then(zipMetadataList)
   .then(list => list.map(extractMetadata))
